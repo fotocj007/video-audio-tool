@@ -65,6 +65,19 @@ python main.py
 *   **深度学习后端**: `torch` (Whisper和Coqui TTS的依赖)已经安装了
 *   **底层多媒体处理**: **FFmpeg.exe** (必须预先安装并配置好环境变量)已经下载了：https://www.gyan.dev/ffmpeg/builds/
 
+### 2.3 注意
+
+*   **Coqui TTS**: 在安装 pip install TTS 时，如果本地没有Visual Studio 生成工具。额外的处理方法是直接下载whl进行安装(绕过编译)：
+```
+mkdir tts_build
+cd tts_build
+pip wheel TTS
+
+pip install --no-index --find-links=. TTS
+
+```
+
+
 ## 3. 功能需求规格 (FRS)
 
 ### 3.1 主界面与菜单
