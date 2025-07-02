@@ -1,0 +1,46 @@
+{
+    "app": {
+        "name": "多媒体处理工具",
+        "version": "1.0.0",
+        "author": "AI Assistant",
+        "window_size": [
+            1420,
+            854
+        ],
+        "window_position": [
+            1947,
+            473
+        ]
+    },
+    "features": {
+        "video_processing": true,
+        "audio_processing": true,
+        "auto_save_settings": true,
+        "show_progress_details": true
+    },
+    "paths": {
+        "default_output_dir": "",
+        "ffmpeg_path": "./ffmpeg.exe",
+        "models_dir": "./models"
+    },
+    "video": {
+        "default_format": "mp4",
+        "quality": "high",
+        "max_file_size_mb": 1000
+    },
+    "audio": {
+        "default_format": "mp3",
+        "sample_rate": 44100,
+        "bitrate": 192
+    },
+    "whisper": {
+        "default_model": "base",
+        "language": "auto",
+        "use_gpu": true
+    },
+    "ui": {
+        "theme": "light",
+        "font_size": 10,
+        "language": "zh_CN"
+    }
+}

@@ -1,0 +1,11 @@
+ffmpeg.exe
+ffplay.exe
+ffprobe.exe
+
+/out/*
+__pycache__/*
+
+/core/__pycache__/*
+/gui/__pycache__/*
+
+/model/*
