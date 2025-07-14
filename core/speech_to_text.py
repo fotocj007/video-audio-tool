@@ -7,11 +7,13 @@
 import os
 from typing import Dict, Callable, Optional
 
-try:
-    import whisper
-except ImportError:
-    whisper = None
-    print("Warning: whisper not installed")
+from faster_whisper import WhisperModel
+
+# try:
+    # import whisper
+# except ImportError:
+#     whisper = None
+#     print("Warning: whisper not installed")
 
 try:
     from pydub import AudioSegment
@@ -101,11 +103,11 @@ class SpeechToText:
         Returns:
             Dict: 包含成功状态、转录文本或错误信息
         """
-        if whisper is None:
-            return {
-                'success': False,
-                'error': 'Whisper模块未安装，请运行: pip install openai-whisper'
-            }
+        # if whisper is None:
+        #     return {
+        #         'success': False,
+        #         'error': 'Whisper模块未安装，请运行: pip install openai-whisper'
+        #     }
             
         # 预处理音频文件
         processed_audio_path = None
@@ -130,7 +132,8 @@ class SpeechToText:
                 os.makedirs(model_download_path, exist_ok=True)
 
                 print(f"Loading Whisper model: {model_size}")
-                self.whisper_model = whisper.load_model(model_size,download_root=model_download_path)
+                # self.whisper_model = whisper.load_model(model_size,download_root=model_download_path)
+                self.whisper_model = WhisperModel(model_size, compute_type="float32")
                 self.current_model_size = model_size
                 
             if progress_callback:
@@ -145,13 +148,19 @@ class SpeechToText:
                 
             # 执行转录
             print(f"Transcribing audio: {processed_audio_path}")
-            result = self.whisper_model.transcribe(processed_audio_path)
+            # result = self.whisper_model.transcribe(processed_audio_path, language="zh",temperature=0.0)
+            segments, info = self.whisper_model.transcribe(processed_audio_path, language="zh", beam_size=5)
             
             if progress_callback:
                 progress_callback(80)
                 
             # 提取转录文本
-            transcribed_text = result['text'].strip()
+            # transcribed_text = result['text'].strip()
+            transcribed_text = ""
+            for segment in segments:
+                print(f"[{segment.start:.2f}s -> {segment.end:.2f}s] {segment.text}")
+                transcribed_text += segment.text
+
             
             # 繁体转简体
             if self.opencc_converter is not None and transcribed_text:
