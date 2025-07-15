@@ -103,6 +103,44 @@ class SpeechToText:
         Returns:
             Dict: 包含成功状态、转录文本或错误信息
         """
+        return self._transcribe_audio(audio_path, output_path, model_size, progress_callback, output_format='text')
+    
+    def speech_to_subtitle(self, audio_path: str, output_path: str, 
+                          model_size: str = 'base', subtitle_format: str = 'srt',
+                          progress_callback: Optional[Callable] = None) -> Dict:
+        """
+        语音转字幕文件
+        
+        Args:
+            audio_path: 音频文件路径
+            output_path: 输出字幕文件路径
+            model_size: Whisper模型大小 (tiny, base, small, medium, large)
+            subtitle_format: 字幕格式 ('srt', 'vtt', 'ass')
+            progress_callback: 进度回调函数
+            
+        Returns:
+            Dict: 包含成功状态、字幕内容或错误信息
+        """
+        return self._transcribe_audio(audio_path, output_path, model_size, progress_callback, 
+                                    output_format='subtitle', subtitle_format=subtitle_format)
+    
+    def _transcribe_audio(self, audio_path: str, output_path: str, 
+                          model_size: str = 'base', progress_callback: Optional[Callable] = None,
+                          output_format: str = 'text', subtitle_format: str = 'srt') -> Dict:
+        """
+        音频转录核心方法
+        
+        Args:
+            audio_path: 音频文件路径
+            output_path: 输出文件路径
+            model_size: Whisper模型大小 (tiny, base, small, medium, large)
+            progress_callback: 进度回调函数
+            output_format: 输出格式 ('text' 或 'subtitle')
+            subtitle_format: 字幕格式 ('srt', 'vtt', 'ass')
+            
+        Returns:
+            Dict: 包含成功状态、转录内容或错误信息
+        """
         # if whisper is None:
         #     return {
         #         'success': False,
@@ -152,45 +190,107 @@ class SpeechToText:
             segments, info = self.whisper_model.transcribe(processed_audio_path, language="zh", beam_size=5)
             
             if progress_callback:
-                progress_callback(80)
-                
-            # 提取转录文本
-            # transcribed_text = result['text'].strip()
-            transcribed_text = ""
-            for segment in segments:
-                print(f"[{segment.start:.2f}s -> {segment.end:.2f}s] {segment.text}")
-                transcribed_text += segment.text
+                progress_callback(70)
+            
+            # 根据输出格式处理结果
+            if output_format == 'text':
+                # 提取转录文本
+                transcribed_text = ""
+                for segment in segments:
+                    print(f"[{segment.start:.2f}s -> {segment.end:.2f}s] {segment.text}")
+                    transcribed_text += segment.text
 
+                # 繁体转简体
+                if self.opencc_converter is not None and transcribed_text:
+                    try:
+                        transcribed_text = self.opencc_converter.convert(transcribed_text)
+                        print("已完成繁体转简体转换")
+                    except Exception as e:
+                        print(f"繁体转简体转换失败: {str(e)}")
+                        # 转换失败时继续使用原文本
+                
+                # 保存到文件
+                # 确保输出目录存在
+                output_dir = os.path.dirname(output_path)
+                if output_dir:
+                    os.makedirs(output_dir, exist_ok=True)
+                    
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    f.write(transcribed_text)
+                    
+                print(f"转录完成，文本已保存到: {output_path}")
+                    
+                if progress_callback:
+                    progress_callback(100)
+                    
+                return {
+                    'success': True,
+                    'text': transcribed_text,
+                    'output_path': output_path,
+                    'message': '语音转文字完成'
+                }
             
-            # 繁体转简体
-            if self.opencc_converter is not None and transcribed_text:
-                try:
-                    transcribed_text = self.opencc_converter.convert(transcribed_text)
-                    print("已完成繁体转简体转换")
-                except Exception as e:
-                    print(f"繁体转简体转换失败: {str(e)}")
-                    # 转换失败时继续使用原文本
+            elif output_format == 'subtitle':
+                # 生成字幕文件
+                subtitle_content = self._generate_subtitle(segments, subtitle_format)
+                
+                # 繁体转简体
+                if self.opencc_converter is not None and subtitle_content:
+                    try:
+                        # 对于SRT和VTT格式，需要保留时间戳，只转换文本部分
+                        if subtitle_format in ['srt', 'vtt']:
+                            lines = subtitle_content.split('\n')
+                            converted_lines = []
+                            for line in lines:
+                                # 跳过空行、数字行和时间戳行
+                                if not line.strip() or line.strip().isdigit() or '-->' in line:
+                                    converted_lines.append(line)
+                                else:
+                                    converted_lines.append(self.opencc_converter.convert(line))
+                            subtitle_content = '\n'.join(converted_lines)
+                        else:
+                            # 对于其他格式，直接转换整个内容
+                            subtitle_content = self.opencc_converter.convert(subtitle_content)
+                        print("已完成繁体转简体转换")
+                    except Exception as e:
+                        print(f"繁体转简体转换失败: {str(e)}")
+                        # 转换失败时继续使用原文本
+                
+                # 保存到文件
+                # 确保输出目录存在
+                output_dir = os.path.dirname(output_path)
+                if output_dir:
+                    os.makedirs(output_dir, exist_ok=True)
+                
+                # 确保文件扩展名正确
+                base_name, _ = os.path.splitext(output_path)
+                if subtitle_format == 'srt':
+                    output_path = f"{base_name}.srt"
+                elif subtitle_format == 'vtt':
+                    output_path = f"{base_name}.vtt"
+                elif subtitle_format == 'ass':
+                    output_path = f"{base_name}.ass"
+                
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    f.write(subtitle_content)
+                
+                print(f"字幕生成完成，已保存到: {output_path}")
+                
+                if progress_callback:
+                    progress_callback(100)
+                
+                return {
+                    'success': True,
+                    'subtitle': subtitle_content,
+                    'output_path': output_path,
+                    'message': f'语音转{subtitle_format.upper()}字幕完成'
+                }
             
-            # 保存到文件
-            # 确保输出目录存在
-            output_dir = os.path.dirname(output_path)
-            if output_dir:
-                os.makedirs(output_dir, exist_ok=True)
-                
-            with open(output_path, 'w', encoding='utf-8') as f:
-                f.write(transcribed_text)
-                
-            print(f"转录完成，文本已保存到: {output_path}")
-                
-            if progress_callback:
-                progress_callback(100)
-                
-            return {
-                'success': True,
-                'text': transcribed_text,
-                'output_path': output_path,
-                'message': '语音转文字完成'
-            }
+            else:
+                return {
+                    'success': False,
+                    'error': f'不支持的输出格式: {output_format}'
+                }
                 
         except Exception as e:
             error_msg = f"语音转文字失败: {str(e)}"
@@ -299,3 +399,166 @@ class SpeechToText:
                 'success': False,
                 'error': f'获取音频信息失败: {str(e)}'
             }
+    
+    def _generate_subtitle(self, segments, subtitle_format: str) -> str:
+        """
+        生成字幕文件内容
+        
+        Args:
+            segments: Whisper转录的片段列表
+            subtitle_format: 字幕格式 ('srt', 'vtt', 'ass')
+            
+        Returns:
+            str: 字幕文件内容
+        """
+        try:
+            if subtitle_format.lower() == 'srt':
+                return self._generate_srt(segments)
+            elif subtitle_format.lower() == 'vtt':
+                return self._generate_vtt(segments)
+            elif subtitle_format.lower() == 'ass':
+                return self._generate_ass(segments)
+            else:
+                raise ValueError(f"不支持的字幕格式: {subtitle_format}")
+        except Exception as e:
+            print(f"生成字幕文件失败: {str(e)}")
+            return ""
+    
+    def _generate_srt(self, segments) -> str:
+        """
+        生成SRT格式字幕
+        
+        Args:
+            segments: Whisper转录的片段列表
+            
+        Returns:
+            str: SRT格式字幕内容
+        """
+        srt_content = []
+        subtitle_index = 1
+        
+        for segment in segments:
+            # 格式化时间戳
+            start_time = self._format_timestamp_srt(segment.start)
+            end_time = self._format_timestamp_srt(segment.end)
+            
+            # 添加字幕条目
+            srt_content.append(str(subtitle_index))
+            srt_content.append(f"{start_time} --> {end_time}")
+            srt_content.append(segment.text.strip())
+            srt_content.append("")  # 空行分隔
+            
+            subtitle_index += 1
+        
+        return "\n".join(srt_content)
+    
+    def _generate_vtt(self, segments) -> str:
+        """
+        生成VTT格式字幕
+        
+        Args:
+            segments: Whisper转录的片段列表
+            
+        Returns:
+            str: VTT格式字幕内容
+        """
+        vtt_content = ["WEBVTT", ""]  # VTT文件头
+        
+        for segment in segments:
+            # 格式化时间戳
+            start_time = self._format_timestamp_vtt(segment.start)
+            end_time = self._format_timestamp_vtt(segment.end)
+            
+            # 添加字幕条目
+            vtt_content.append(f"{start_time} --> {end_time}")
+            vtt_content.append(segment.text.strip())
+            vtt_content.append("")  # 空行分隔
+        
+        return "\n".join(vtt_content)
+    
+    def _generate_ass(self, segments) -> str:
+        """
+        生成ASS格式字幕
+        
+        Args:
+            segments: Whisper转录的片段列表
+            
+        Returns:
+            str: ASS格式字幕内容
+        """
+        # ASS文件头
+        ass_header = """[Script Info]
+Title: Generated by Video MP3 Tool
+ScriptType: v4.00+
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+        
+        ass_content = [ass_header]
+        
+        for segment in segments:
+            # 格式化时间戳
+            start_time = self._format_timestamp_ass(segment.start)
+            end_time = self._format_timestamp_ass(segment.end)
+            
+            # 添加字幕条目
+            dialogue_line = f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{segment.text.strip()}"
+            ass_content.append(dialogue_line)
+        
+        return "\n".join(ass_content)
+    
+    def _format_timestamp_srt(self, seconds: float) -> str:
+        """
+        格式化时间戳为SRT格式 (HH:MM:SS,mmm)
+        
+        Args:
+            seconds: 秒数
+            
+        Returns:
+            str: SRT格式时间戳
+        """
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        milliseconds = int((seconds % 1) * 1000)
+        
+        return f"{hours:02d}:{minutes:02d}:{secs:02d},{milliseconds:03d}"
+    
+    def _format_timestamp_vtt(self, seconds: float) -> str:
+        """
+        格式化时间戳为VTT格式 (HH:MM:SS.mmm)
+        
+        Args:
+            seconds: 秒数
+            
+        Returns:
+            str: VTT格式时间戳
+        """
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        milliseconds = int((seconds % 1) * 1000)
+        
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}.{milliseconds:03d}"
+    
+    def _format_timestamp_ass(self, seconds: float) -> str:
+        """
+        格式化时间戳为ASS格式 (H:MM:SS.cc)
+        
+        Args:
+            seconds: 秒数
+            
+        Returns:
+            str: ASS格式时间戳
+        """
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        centiseconds = int((seconds % 1) * 100)
+        
+        return f"{hours}:{minutes:02d}:{secs:02d}.{centiseconds:02d}"

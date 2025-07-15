@@ -140,24 +140,60 @@ class AudioWorkerThread(QThread):
             self.error_occurred.emit(error_msg)
             
     def _speech_to_text(self):
-        """语音转文字处理"""
-        from core.audio_handler import AudioHandler
+        """语音转文字/字幕处理"""
+        from core.speech_to_text import SpeechToText
         
         audio_path = self.kwargs.get('audio_path')
         output_path = self.kwargs.get('output_path')
         model_size = self.kwargs.get('model_size', 'base')
+        is_subtitle = self.kwargs.get('is_subtitle', False)
+        subtitle_format = self.kwargs.get('subtitle_format', 'srt')
         
-        self.status_updated.emit("正在加载Whisper模型...")
+        task_type = "字幕" if is_subtitle else "文字"
+        self.status_updated.emit(f"正在加载Whisper模型...")
         
-        handler = AudioHandler()
-        result = handler.speech_to_text(audio_path, output_path, model_size,
-                                      progress_callback=self._update_progress)
-        
-        if result['success']:
-            self.transcription_result.emit(result['text'])
-            self.finished_successfully.emit("语音转文字完成！")
-        else:
-            self.error_occurred.emit(result['error'])
+        try:
+            # 初始化语音转文字处理器
+            stt = SpeechToText()
+            
+            if is_subtitle:
+                # 生成字幕文件
+                self.status_updated.emit(f"正在生成{subtitle_format.upper()}字幕...")
+                result = stt.speech_to_subtitle(
+                    audio_path, 
+                    output_path, 
+                    model_size=model_size,
+                    subtitle_format=subtitle_format,
+                    progress_callback=self._update_progress
+                )
+            else:
+                # 生成文本文件
+                self.status_updated.emit("正在转录音频...")
+                result = stt.speech_to_text(
+                    audio_path, 
+                    output_path,
+                    model_size=model_size,
+                    progress_callback=self._update_progress
+                )
+            
+            if result['success']:
+                # 根据输出类型获取正确的文本内容
+                if is_subtitle:
+                    # 字幕生成返回的是subtitle键
+                    content = result.get('subtitle', '')
+                else:
+                    # 文本生成返回的是text键
+                    content = result.get('text', '')
+                
+                self.transcription_result.emit(content)
+                success_msg = f"语音转{task_type}完成！" if not is_subtitle else f"语音转{subtitle_format.upper()}字幕完成！"
+                self.finished_successfully.emit(success_msg)
+            else:
+                self.error_occurred.emit(result['error'])
+                
+        except Exception as e:
+            error_msg = f"语音转{task_type}失败: {str(e)}"
+            self.error_occurred.emit(error_msg)
             
     def _split_audio(self):
         """音频拆分处理"""

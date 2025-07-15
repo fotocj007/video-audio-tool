@@ -76,16 +76,34 @@ class STTTabWidget(QWidget):
         
         # 输出设置组
         output_group = QGroupBox("输出设置")
-        output_layout = QHBoxLayout(output_group)
+        output_layout = QGridLayout(output_group)
         
-        output_layout.addWidget(QLabel("输出文件:"))
+        # 输出类型选择
+        output_layout.addWidget(QLabel("输出类型:"), 0, 0)
+        self.output_type_combo = QComboBox()
+        self.output_type_combo.addItems(["文本文件 (.txt)", "字幕文件 (.srt/.vtt/.ass)"])
+        self.output_type_combo.currentTextChanged.connect(self.on_output_type_changed)
+        output_layout.addWidget(self.output_type_combo, 0, 1)
+        
+        # 字幕格式选择（初始隐藏）
+        self.subtitle_format_label = QLabel("字幕格式:")
+        self.subtitle_format_label.setVisible(False)
+        output_layout.addWidget(self.subtitle_format_label, 1, 0)
+        
+        self.subtitle_format_combo = QComboBox()
+        self.subtitle_format_combo.addItems(["SRT", "VTT", "ASS"])
+        self.subtitle_format_combo.setVisible(False)
+        output_layout.addWidget(self.subtitle_format_combo, 1, 1)
+        
+        # 输出文件路径
+        output_layout.addWidget(QLabel("输出文件:"), 2, 0)
         self.output_label = QLabel("未选择文件")
         self.output_label.setStyleSheet("QLabel { padding: 5px; border: 1px solid #ccc; }")
-        output_layout.addWidget(self.output_label)
+        output_layout.addWidget(self.output_label, 2, 1)
         
         output_btn = QPushButton("选择保存位置")
         output_btn.clicked.connect(self.browse_output_file)
-        output_layout.addWidget(output_btn)
+        output_layout.addWidget(output_btn, 2, 2)
         
         layout.addWidget(output_group)
         
@@ -134,11 +152,30 @@ class STTTabWidget(QWidget):
             self.stt_file_path = file_path
             self.update_audio_info(file_path)
             
+    def on_output_type_changed(self):
+        """输出类型改变时的处理"""
+        is_subtitle = "字幕文件" in self.output_type_combo.currentText()
+        self.subtitle_format_label.setVisible(is_subtitle)
+        self.subtitle_format_combo.setVisible(is_subtitle)
+        
+        # 清空之前选择的输出文件
+        self.output_label.setText("未选择文件")
+        self.stt_output_path = None
+    
     def browse_output_file(self):
         """浏览输出文件"""
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, "保存文本文件", "transcription.txt", 
-            "文本文件 (*.txt)")
+        is_subtitle = "字幕文件" in self.output_type_combo.currentText()
+        
+        if is_subtitle:
+            subtitle_format = self.subtitle_format_combo.currentText().lower()
+            file_path, _ = QFileDialog.getSaveFileName(
+                self, f"保存{subtitle_format.upper()}字幕文件", f"subtitle.{subtitle_format}", 
+                f"{subtitle_format.upper()}字幕文件 (*.{subtitle_format})")
+        else:
+            file_path, _ = QFileDialog.getSaveFileName(
+                self, "保存文本文件", "transcription.txt", 
+                "文本文件 (*.txt)")
+        
         if file_path:
             self.output_label.setText(os.path.basename(file_path))
             self.stt_output_path = file_path
@@ -175,6 +212,10 @@ class STTTabWidget(QWidget):
         # 获取选择的模型大小
         model_size = self.whisper_model_combo.currentText()
         
+        # 判断输出类型
+        is_subtitle = "字幕文件" in self.output_type_combo.currentText()
+        subtitle_format = self.subtitle_format_combo.currentText().lower() if is_subtitle else None
+        
         # 启动工作线程
         self.progress.setVisible(True)
         self.progress.setRange(0, 100)
@@ -185,7 +226,9 @@ class STTTabWidget(QWidget):
             'stt',
             audio_path=self.stt_file_path,
             output_path=self.stt_output_path,
-            model_size=model_size
+            model_size=model_size,
+            is_subtitle=is_subtitle,
+            subtitle_format=subtitle_format
         )
         
         # 连接信号
@@ -198,7 +241,8 @@ class STTTabWidget(QWidget):
         # 启动线程
         self.stt_worker.start()
         
-        print(f'开始语音转文字处理: {self.stt_file_path} -> {self.stt_output_path}')
+        output_type = "字幕" if is_subtitle else "文字"
+        print(f'开始语音转{output_type}处理: {self.stt_file_path} -> {self.stt_output_path}')
         
     def on_transcription_result(self, text):
         """处理转录结果"""

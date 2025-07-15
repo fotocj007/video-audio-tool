@@ -35,6 +35,7 @@ python main.py
 
 ### 音频处理
 - 语音转文字（基于Whisper）
+- 语音转字幕（支持SRT、VTT、ASS格式）
 - 音频拆分和合并
 - 音频格式转换
 - 文字转音频（基于Coqui TTS）效果不是特别好
@@ -153,13 +154,33 @@ pip install --no-index --find-links=. TTS
     *   一个`.txt`文件，包含识别出的所有文字。
 *   **核心实现逻辑**:
     1.  使用`pydub`将上传的音频统一转换为`WAV`格式，以获得最佳兼容性。
-    2.  加载`openai-whisper`模型 `model = whisper.load_model("base")`。
-    3.  调用 `result = model.transcribe("path/to/audio.wav")`。
-    4.  将 `result['text']` 写入文本文件。
+    2.  加载`faster-whisper`模型 `model = WhisperModel(model_size, compute_type="float32")`。
+    3.  调用 `segments, info = model.transcribe("path/to/audio.wav", language="zh")`。
+    4.  将转录文本写入文本文件。
 *   **UI/UX建议**:
-    *   一个“上传音频”按钮。
+    *   一个"上传音频"按钮。
     *   一个下拉框，允许用户选择Whisper模型的大小（如`tiny`, `base`, `small`），并提示不同模型的速度和精度差异。
     *   一个进度条，因为大文件的处理时间可能较长。
+
+#### 功能 (1.5): 语音转字幕
+
+*   **功能描述**: 将音频文件中的语音内容识别并转换为带时间戳的字幕文件，支持多种字幕格式。
+*   **输入**:
+    *   一个音频文件路径 (`.mp3`, `.wav`等)。
+    *   字幕格式选择 (`SRT`, `VTT`, `ASS`)。
+*   **输出**:
+    *   一个字幕文件，包含时间戳和对应的文字内容。
+*   **核心实现逻辑**:
+    1.  使用`faster-whisper`进行语音识别，保留时间戳信息。
+    2.  根据选择的格式生成相应的字幕文件：
+        *   **SRT格式**: 标准字幕格式，时间戳格式为 `HH:MM:SS,mmm`
+        *   **VTT格式**: Web视频字幕格式，时间戳格式为 `HH:MM:SS.mmm`
+        *   **ASS格式**: 高级字幕格式，支持样式设置
+    3.  自动进行繁体转简体转换（如果安装了opencc）。
+*   **UI/UX建议**:
+    *   在语音转文字界面添加字幕格式选择选项。
+    *   提供"生成字幕"按钮，与"生成文本"按钮并列。
+    *   字幕预览区域，显示生成的字幕内容。
 
 #### 功能 (2): 音频拆分
 
